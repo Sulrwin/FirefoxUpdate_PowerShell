@@ -16,7 +16,10 @@ $CHKFailedNewest = "FAILED TO CHECK NEWEST VERSION"
 $DLFailedNewest = "FAILED TO DOWNLOAD NEWEST INSTALLER"
 $INSFailed = "FAILED TO INSTALL NEWEST VERSION"
 
-New-Item -ItemType Directory -Force -Path $GeneralFolder # Force creation of log/temp folder
+if (Test-Path $GeneralFolder) { #Check if folder path has been made before
+} else {
+    New-Item -ItemType Directory -Force -Path $GeneralFolder # Force creation of log/temp folder
+}
 
 #Test to see if previous log is there and delete. ###### Possible to disable this and the logs will just be added on to existing
 if (Test-Path $LogFile) {
@@ -42,8 +45,9 @@ $Main = {
 
     # Get current firefox version
     try {
-        $ProgInstalled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Mozilla\Mozilla Firefox' | Select 'CurrentVersion').CurrentVersion #Read current version of program from the file properties. FIREFOX ONLY Maybe?
-        if ($ProgInstalled -eq $null) {
+        if (Test-Path 'HKLM:\SOFTWARE\Mozilla\Mozilla Firefox') {
+            $ProgInstalled = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Mozilla\Mozilla Firefox' | Select 'CurrentVersion').CurrentVersion #Read current version of program from the file properties. FIREFOX ONLY Maybe?
+        } else {
             throw
         }
         Write-Log -level INFO -message ("Current Version: " + $ProgInstalled) #Log Current Version
@@ -73,14 +77,17 @@ $Main = {
         Write-Log -level INFO -message "Newest is installed" #Log if newest is already installed and end safely
         return
     } else {
+        Write-Log -level INFO -message "----------------------------------------------------"
         Write-Log -level INFO -message "Downloading newest version of installer..." #Log start of download
         $ProgDownloadResult = (wget $MSIUrl -OutFile $MSILocAndName -PassThru) #Download file
         if ($ProgDownloadResult.StatusCode -eq $DownloadSuccessCode) { #Determine if download was a success or not
             Write-Log -level INFO -message "Download Complete"
+            Write-Log -level INFO -message "----------------------------------------------------"
             #Write-Log -level INFO -message ("Return Code: " + $ProgDownloadResult.StatusCode) #This will return a code on success in case you need to see what the success code is for modifications
         } else {
             Write-Log -level ERROR -message $DLFailedNewest
             Write-Log -level INFO -message ("Return Code: " + $ProgDownloadResult.StatusCode) #Return failure code
+            Write-Log -level INFO -message "----------------------------------------------------"
         }
 
         #####Disabled process to uninstall Firefox. Determined was not needed. 
@@ -96,15 +103,18 @@ $Main = {
         }
         #>
 
+        #Write-Log -level INFO -message "----------------------------------------------------"
         Write-Log -level INFO -message "Installing new version of Firefox..." #Log installation start
         $ProgInstallResult = $(Start-Process msiexec.exe -Wait -ArgumentList ('/i ' + $MSILocAndName + ' /q /le ' + $MSILOGLocAndName) -PassThru) #Start installation and log process
         if ( $ProgInstallResult.ExitCode -eq $InstallSuccessCode ) {
             Write-Log -level INFO -message "Completed Installation!"
+            Write-Log -level INFO -message "----------------------------------------------------"
             #Write-Log -level INFO -message ("Return Code: " + $ProgInstallResult.ExitCode) #Same as before this is for modifications
             rm $MSILOGLocAndName #Here we can remove the log created from the installer on success. You can disable for troubleshooting issues if needed.
         } else {
             Write-Log -level ERROR -message $INSFailed
             Write-Log -level INFO -message ("Return Code: " + $ProgInstallResult.ExitCode) #Log failure to install with code and crash.
+            Write-Log -level INFO -message "----------------------------------------------------"
             throw $INSFailed
         }
         rm $MSILocAndName #Delete MSI installer after success or failure. No one will be left behind!
